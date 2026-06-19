@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<media-browser-service-desc xmlns:android="http://schemas.android.com/apk/res/android"
+    android:rootMediaId="netease_music_root">
+    <search android:searchEnabled="true" />
+</media-browser-service-desc>
