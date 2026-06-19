@@ -395,7 +395,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
             .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
         final filePath = '$downloadDir/$fileName';
         await File(filePath).writeAsBytes(res.bodyBytes);
-        await storage.addDownload(song, filePath);
+
+        // 保存带 filePath 的歌曲记录
+        final downloadedSong = Song(
+          id: song.id, name: song.name, artist: song.artist,
+          artistId: song.artistId, album: song.album, albumId: song.albumId,
+          coverUrl: song.coverUrl, urlId: song.urlId, duration: song.duration,
+          sourceId: song.sourceId, isVip: song.isVip, filePath: filePath,
+        );
+        await storage.addDownload(downloadedSong, filePath);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

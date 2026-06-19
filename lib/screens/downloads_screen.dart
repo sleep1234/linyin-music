@@ -142,9 +142,25 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
           setState(() => _downloads.removeAt(index));
         },
       ),
-      onTap: () {
+      onTap: () async {
         // 播放本地文件
-        player.play(song);
+        final file = File(filePath);
+        if (await file.exists()) {
+          final localSong = Song(
+            id: song.id, name: song.name, artist: song.artist,
+            artistId: song.artistId, album: song.album, albumId: song.albumId,
+            coverUrl: song.coverUrl, urlId: song.urlId, duration: song.duration,
+            sourceId: song.sourceId, isVip: song.isVip, filePath: filePath,
+          );
+          await player.play(localSong);
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('本地文件已丢失，尝试在线播放')),
+            );
+          }
+          player.play(song);
+        }
       },
     );
   }

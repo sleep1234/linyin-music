@@ -152,7 +152,9 @@ class PlayerService extends ChangeNotifier {
       duration: _player.duration,
       artUri: (song.coverUrl != null && song.coverUrl!.startsWith('http'))
           ? Uri.parse(song.coverUrl!)
-          : null,
+          : (song.coverUrl != null && File(song.coverUrl!).existsSync())
+              ? Uri.file(song.coverUrl!)
+              : null,
     ));
   }
 
@@ -177,7 +179,20 @@ class PlayerService extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    final url = await _sourceService.getSongUrl(song, quality: _quality);
+    String? url;
+
+    // 优先使用本地文件路径（下载的歌曲）
+    if (song.filePath != null) {
+      final file = File(song.filePath!);
+      if (await file.exists()) {
+        url = song.filePath;
+      }
+    }
+
+    // 本地文件不存在或非下载歌曲，走网络
+    if (url == null) {
+      url = await _sourceService.getSongUrl(song, quality: _quality);
+    }
 
     if (url == null) {
       _isLoading = false;

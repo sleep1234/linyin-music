@@ -346,6 +346,7 @@ class StorageService {
             : null,
         sourceId: row['source_id'] as String,
         isVip: (row['is_vip'] as int) == 1,
+        filePath: row['file_path'] as String?,
       );
     }
   }

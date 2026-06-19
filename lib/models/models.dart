@@ -12,6 +12,7 @@ class Song {
   final String sourceId; // 来源平台
   final bool isVip;
   final Map<String, String>? urlCache; // 不同音质的URL缓存
+  final String? filePath; // 本地文件路径（下载的歌曲）
 
   Song({
     required this.id,
@@ -26,6 +27,7 @@ class Song {
     required this.sourceId,
     this.isVip = false,
     this.urlCache,
+    this.filePath,
   });
 
   String get durationText {
@@ -40,17 +42,19 @@ class Song {
       id: json['id']?.toString() ?? '',
       name: json['name'] ?? '',
       artist: json['artist'] ?? json['ar']?[0]?['name'] ?? '',
-      artistId: json['artistId'] ?? json['ar']?[0]?['id']?.toString() ?? '',
+      artistId: json['artistId']?.toString() ?? json['ar']?[0]?['id']?.toString() ?? '',
       album: json['album'] ?? json['al']?['name'] ?? '',
-      albumId: json['albumId'] ?? json['al']?['id']?.toString() ?? '',
+      albumId: json['albumId']?.toString() ?? json['al']?['id']?.toString() ?? '',
       coverUrl: json['coverUrl'] ?? json['al']?['picUrl'],
+      urlId: json['urlId']?.toString(),
       duration: json['duration'] != null
-          ? Duration(milliseconds: json['duration'])
+          ? Duration(milliseconds: json['duration'] as int)
           : json['dt'] != null
-              ? Duration(milliseconds: json['dt'])
+              ? Duration(milliseconds: json['dt'] as int)
               : null,
       sourceId: json['sourceId'] ?? 'netease',
       isVip: json['vip'] ?? json['fee'] == 1,
+      filePath: json['filePath']?.toString(),
     );
   }
 
@@ -62,9 +66,11 @@ class Song {
     'album': album,
     'albumId': albumId,
     'coverUrl': coverUrl,
+    'urlId': urlId,
     'duration': duration?.inMilliseconds,
     'sourceId': sourceId,
     'vip': isVip,
+    'filePath': filePath,
   };
 
   @override
