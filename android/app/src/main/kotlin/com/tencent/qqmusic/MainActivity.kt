@@ -1,4 +1,4 @@
-package com.xiaopeng.netease_music
+package com.tencent.qqmusic
 
 import com.ryanheise.audioservice.AudioServiceFragmentActivity
 
