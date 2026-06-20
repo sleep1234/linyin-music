@@ -61,13 +61,7 @@ jobs:
       - name: Build IPA (no codesign)
         if: env.SIGNED != 'true'
         run: |
-          cd ios
-          xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release \
-            -archivePath $RUNNER_TEMP/Runner.xcarchive archive \
-            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
-          xcodebuild -exportArchive \
-            -archivePath $RUNNER_TEMP/Runner.xcarchive \
-            -exportOptionsPlist /dev/stdin << 'EOF'
+          cat > $RUNNER_TEMP/ExportOptions.plist << 'PLISTEOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -80,7 +74,15 @@ jobs:
             <false/>
           </dict>
           </plist>
-          EOF
+          PLISTEOF
+          cd ios
+          xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release \
+            -archivePath $RUNNER_TEMP/Runner.xcarchive archive \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/Runner.xcarchive \
+            -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
+            -exportPath $RUNNER_TEMP/export
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
@@ -88,7 +90,7 @@ jobs:
           name: linyin-music-ipa
           path: |
             build/ios/ipa/*.ipa
-            build/ios/archive/Products/Applications/*.ipa
+            $RUNNER_TEMP/export/*.ipa
 
       - name: Release (on tag)
         if: startsWith(github.ref, 'refs/tags/v')
@@ -96,6 +98,7 @@ jobs:
         with:
           files: |
             build/ios/ipa/*.ipa
+            $RUNNER_TEMP/export/*.ipa
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
