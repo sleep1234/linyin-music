@@ -1,176 +1,100 @@
----
-AIGC:
-  ContentProducer: '001191110102MAD55U9H0F10002'
-  ContentPropagator: '001191110102MAD55U9H0F10002'
-  Label: '1'
-  ProduceID: '333d51a9-db01-4229-a815-d410ab313992'
-  PropagateID: '333d51a9-db01-4229-a815-d410ab313992'
-  ReservedCode1: 'bd7d20dd-b98f-45dc-8c53-381a3a9d55c0'
-  ReservedCode2: 'bd7d20dd-b98f-45dc-8c53-381a3a9d55c0'
----
+# 森林之音 - 项目接续文档
 
-# 森林之音 - 开发接续文档
+## 项目地址
+- GitHub: https://github.com/sleep1234/linyin-music
+- 本地路径: /vol1/1000/9自己的软件项目/netease_music
+- GitHub Token: 见服务器环境变量或密码管理器
 
-> 最后更新：2026-06-19
+## 当前状态
 
-## 项目概况
+### 已完成
+- [x] Flutter 多源音乐播放器核心功能（网易云+酷我双音源）
+- [x] 搜索、播放、歌词、排行榜、歌单、收藏、历史、下载
+- [x] 后台播放 + 锁屏控制（audio_service）
+- [x] Android 本地 VIP 模式
+- [x] 代码审查：修复 Song 序列化丢失字段、下载歌曲离线播放、filePath 字段
+- [x] 创建 GitHub 仓库并推送代码
+- [x] GitHub Actions CI/CD 配置（Android + iOS）
+- [x] CarWith/CarPlay 基础配置（AndroidManifest + CarPlaySceneDelegate.swift）
+- [x] 服务器 Flutter 环境配置（Flutter 3.44.2 + Android SDK 36 + NDK 28）
+- [x] Android APK 本地编译成功（55.1MB）
+- [x] mimo2api 项目部署（端口 4008，开机自启）
 
-- **App 名称：** 森林之音
-- **包名：** `com.xiaopeng.netease_music`
-- **技术栈：** Flutter 3.44.1 + Dart 3.12.1
-- **状态：** 功能基本完成，可日常使用
+### 未完成 / 待处理
+- [ ] iOS 版本实际编译（需 macOS 环境，GitHub Actions 云端编译）
+- [ ] CarPlay SceneDelegate 接入实际 MediaSession 数据（目前是空壳模板）
+- [ ] 无线 ADB 连接安装 APK 到手机
+- [ ] CarWith 车机实际测试
+- [ ] 越狱设备安装测试
+- [ ] assets/ 目录缺少应用图标等资源文件
+- [ ] pubspec.yaml 中 assets 目录引用报错（目录已创建但为空）
 
----
+## 编译环境
 
-## 构建与部署
+| 组件 | 版本 | 路径 |
+|------|------|------|
+| Flutter | 3.44.2 | `/opt/flutter/` |
+| Dart | 3.12.2 | Flutter 自带 |
+| Android SDK | 36.0.0 | `/opt/android-sdk/` |
+| NDK | 28.2.13676358 | `/opt/android-sdk/ndk/` |
+| Java | 21 | `/usr/local/bin/java` |
 
+### 编译命令
 ```bash
-# 构建 debug APK
-cd C:\Users\zhp\Desktop\netease_music
-C:\flutter\bin\flutter.bat build apk --debug
-
-# 安装到设备
-C:\Android\Sdk\platform-tools\adb.exe install -r build\app\outputs\flutter-apk\app-debug.apk
-
-# 查看日志
-C:\Android\Sdk\platform-tools\adb.exe logcat -s flutter
+export PATH="/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:$PATH"
+export ANDROID_HOME="/opt/android-sdk"
+export PUB_HOSTED_URL=https://pub.dev
+export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
+export http_proxy=http://192.168.31.216:2080
+export https_proxy=http://192.168.31.216:2080
+cd /vol1/1000/9自己的软件项目/netease_music
+flutter build apk --release
 ```
 
----
+### 注意事项
+- Gradle 不能走 HTTP 代理（dl.google.com TLS 握手失败），直连即可
+- Flutter pub get 需要走代理，用 `http_proxy`/`https_proxy` 环境变量
+- settings.gradle.kts 和 build.gradle.kts 不能加阿里云镜像，会和 Flutter 工具链 `FAIL_ON_PROJECT_REPOS` 冲突
+- Gradle init.gradle 也不能加 allprojects 仓库，同样冲突
 
-## 架构概览
+## 代理信息
+- HTTP 代理: `192.168.31.216:2080`
+- 用途: GitHub 推送、Flutter SDK 下载、pub get、Android SDK 组件下载
+- 限制: 不支持 dl.google.com 的 HTTPS CONNECT 隧道
 
+## 项目架构
 ```
 lib/
-├── main.dart                 # 入口，MultiProvider 注册三个 Service
-├── config.dart               # 配置：AudioQuality 枚举、MusicSource 模型
-├── models/models.dart        # 数据模型：Song, Playlist, Artist 等
-├── utils/lrc_parser.dart     # LRC 歌词解析器
+├── main.dart                    # 入口
+├── config.dart                  # 音源配置、音质枚举
+├── models/models.dart           # Song/Playlist/Artist 模型
 ├── services/
-│   ├── music_source_service.dart   # 音乐 API 客户端（搜索/播放链接/歌词/封面/排行榜/歌单导入）
-│   ├── player_service.dart         # 播放引擎（just_audio + audio_service + 歌词同步）
-│   └── storage_service.dart        # 本地存储（SQLite 7 张表 + SharedPreferences）
-└── screens/
-    ├── home_screen.dart       # 首页（发现/歌单/我的 三 Tab）
-    ├── search_screen.dart     # 搜索页（多源搜索 + 历史 + 热词）
-    ├── player_screen.dart     # 全屏播放器（封面/歌词/控制）
-    ├── play_queue_sheet.dart  # 播放队列底部弹窗
-    ├── playlist_tab.dart      # 歌单管理 + 网易云导入
-    ├── favorites_screen.dart  # 收藏列表
-    ├── history_screen.dart    # 播放历史
-    ├── downloads_screen.dart  # 下载管理
-    └── settings_screen.dart   # 设置页
+│   ├── music_source_service.dart  # 多源搜索+URL缓存+排行榜
+│   ├── player_service.dart        # 播放器+歌词同步+收藏
+│   └── storage_service.dart       # SQLite+SharedPreferences 存储
+├── screens/
+│   ├── home_screen.dart           # 首页（排行榜）
+│   ├── search_screen.dart         # 搜索
+│   ├── player_screen.dart         # 播放页+歌词
+│   ├── play_queue_sheet.dart      # 播放队列
+│   ├── playlist_tab.dart          # 歌单管理
+│   ├── favorites_screen.dart      # 收藏
+│   ├── history_screen.dart        # 历史
+│   ├── downloads_screen.dart      # 下载管理
+│   └── settings_screen.dart       # 设置
+└── utils/lrc_parser.dart          # LRC 歌词解析
 ```
 
----
+## 关键修复记录
+1. `Song.toJson/fromJson` 补全 urlId/artistId/albumId/filePath 字段
+2. 新增 `Song.filePath` 字段支持离线播放
+3. `player_service.dart` 优先检查本地文件再走网络
+4. `downloads_screen.dart` 下载时保存完整歌曲信息
+5. 添加 `dart:io` import 修复 File 未定义错误
+6. 移除无效的 `android:automedia` 和错误格式的 automotive XML
 
-## API 说明
-
-### 1. GD Studio 聚合 API（搜索/播放链接/歌词/封面）
-
-- **地址：** `https://music-api.gdstudio.xyz/api.php`
-- **方法：** GET
-- **关键：** 所有请求必须带 `s` 参数（CRC32 校验）
-
-| types | 用途 | 必要参数 |
-|-------|------|----------|
-| `search` | 搜索 | `name`, `count`, `pages`, `source` |
-| `url` | 播放链接 | `id`, `source`, `br` |
-| `lyric` | 歌词 | `id`, `source` |
-| `pic` | 封面URL | `id`, `source` |
-
-**CRC32 计算方式：**
-```dart
-import 'package:archive/archive.dart';
-int s = getCrc32(urlEncode(mainValue).codeUnits);
-// urlEncode = encodeURIComponent + 替换 ( ) * ' !
-```
-
-**source 参数：** `netease`（网易云）、`kuwo`（酷我）
-
-### 2. 网易云官方 API（排行榜/歌单导入）
-
-- **方法：** GET
-- **必须 Header：** `User-Agent` + `Referer: https://music.163.com`
-
-| 接口 | 用途 |
-|------|------|
-| `https://music.163.com/api/v6/playlist/detail?id={id}` | 获取排行榜/歌单详情 |
-| `https://music.163.com/api/user/playlist?uid={uid}&limit=50` | 获取用户歌单列表 |
-
-**排行榜 ID：**
-| 名称 | ID |
-|------|-----|
-| 热歌榜 | 3778678 |
-| 新歌榜 | 3779629 |
-| 飙升榜 | 19723756 |
-| ACG榜 | 71385702 |
-| 欧美榜 | 2809513713 |
-| 日语榜 | 5059644681 |
-| 古典榜 | 71384707 |
-| 电音榜 | 1978921795 |
-| 韩语榜 | 745956260 |
-
----
-
-## 数据库表结构（SQLite v4）
-
-| 表名 | 用途 | 过期策略 |
-|------|------|----------|
-| `favorites` | 收藏歌曲 | 永久 |
-| `history` | 播放历史 | 最多 200 条 |
-| `url_cache` | 播放链接缓存 | 1 小时 |
-| `lyric_cache` | 歌词缓存 | 永久 |
-| `playlists` | 本地歌单 | 永久 |
-| `playlist_songs` | 歌单内歌曲 | 跟随歌单 |
-| `downloads` | 下载记录 | 永久 |
-
-**SharedPreferences：**
-- `player_playlist` / `player_playlist_index` — 播放队列持久化
-- `search_history` — 搜索历史（最多 30 条）
-
----
-
-## 缓存体系
-
-| 类型 | 位置 | 有效期 |
-|------|------|--------|
-| 播放链接 | SQLite `url_cache` | 1 小时 |
-| 歌词 | SQLite `lyric_cache` | 永久 |
-| 搜索结果 | 内存 LinkedHashMap | 最近 20 次 |
-| 排行榜 | 内存 Map | 本次会话 |
-| 封面图片 | CachedNetworkImage 磁盘 | 自动管理 |
-
----
-
-## 已知问题与注意事项
-
-### 封面图片 403
-- 网易云 CDN 有防盗链，必须用 `CachedNetworkImage` + `httpHeaders` 发送 `Referer: https://music.163.com`
-- **不能用 `Image.network`**，它不会携带自定义 headers
-
-### 部分歌曲无法播放
-- 有些歌曲在所有平台都没有版权/已下架，API 返回空 URL
-- 已实现：播放失败自动跳下一首
-- 未来可优化：在列表中标记不可播放的歌曲
-
-### API 限制
-- GD Studio 的 POST 接口对国内 IP 不稳定，排行榜/歌单已改用网易云官方 API
-- GD Studio 的 `userlist` 类型已废弃，歌单导入改用网易云官方 API
-- 搜索/播放链接/歌词/封面仍用 GD Studio GET 接口
-
-### audio_service 初始化
-- `MainActivity` 必须继承 `AudioServiceFragmentActivity`（不是 `FlutterActivity`）
-- AndroidManifest 需要 `tools:ignore="Instantiatable"` 注解
-
----
-
-## 未来可扩展功能
-
-1. **歌词翻译** — API 已支持 `tlyric` 字段，前端未实现
-2. **多语言** — 当前仅中文
-3. **桌面歌词** — audio_service 支持但前端未实现
-4. **均衡器** — just_audio 支持 Android Equalizer
-5. **歌曲标签/分类** — 按风格、心情分类
-6. **推荐算法** — 基于播放历史推荐
-7. **跨设备同步** — 收藏/歌单云端同步
+## iOS CI 说明
+- 工作流: `.github/workflows/build-ios.yml`
+- macOS runner 无签名证书，产出 unsigned IPA
+- 用巨魔/TrollStore 安装不需要签名
+- 如果需要正式签名，在 GitHub Secrets 中配置 IOS_P12_BASE64、IOS_P12_PASSWORD、IOS_PROVISION_BASE64
