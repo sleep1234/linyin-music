@@ -23,6 +23,9 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
+      - name: Build iOS (no codesign)
+        run: flutter build ios --release --no-codesign
+
       - name: Setup signing
         env:
           P12_BASE64: ${{ secrets.IOS_P12_BASE64 }}
@@ -44,22 +47,39 @@ jobs:
             mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
             UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< "$(security cms -D -i $PROV_PATH)")
             cp $PROV_PATH ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
-            echo "SIGNED=true" >> $GITHUB_ENV
+            echo "HAS_SIGNING=true" >> $GITHUB_ENV
           else
-            echo "No signing credentials, will build without signing"
-            echo "SIGNED=false" >> $GITHUB_ENV
+            echo "HAS_SIGNING=false" >> $GITHUB_ENV
           fi
 
-      - name: Build iOS (no codesign for CI IPA)
-        if: env.SIGNED != 'true'
-        run: flutter build ios --release --no-codesign
+      - name: Archive and export IPA (signed)
+        if: env.HAS_SIGNING == 'true'
+        run: |
+          cat > $RUNNER_TEMP/ExportOptions.plist << 'PLISTEOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>development</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>compileBitcode</key>
+            <false/>
+          </dict>
+          </plist>
+          PLISTEOF
+          cd ios
+          xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release \
+            -archivePath $RUNNER_TEMP/Runner.xcarchive archive \
+            CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/Runner.xcarchive \
+            -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
+            -exportPath $RUNNER_TEMP/export
 
-      - name: Build IPA
-        if: env.SIGNED == 'true'
-        run: flutter build ipa --release
-
-      - name: Build IPA (no codesign)
-        if: env.SIGNED != 'true'
+      - name: Archive and export IPA (no codesign)
+        if: env.HAS_SIGNING != 'true'
         run: |
           cat > $RUNNER_TEMP/ExportOptions.plist << 'PLISTEOF'
           <?xml version="1.0" encoding="UTF-8"?>
