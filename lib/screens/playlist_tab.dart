@@ -5,6 +5,7 @@ import '../services/player_service.dart';
 import '../services/music_source_service.dart';
 import '../services/storage_service.dart';
 import '../models/models.dart';
+import 'player_screen.dart';
 /// 歌单Tab
 class PlaylistTab extends StatefulWidget {
   const PlaylistTab({super.key});
@@ -416,7 +417,11 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
         },
       ),
       onTap: () {
-        player.play(song, playlist: _songs, index: index);
+        if (player.currentSong?.id == song.id && player.currentSong?.sourceId == song.sourceId) {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const PlayerScreen()));
+        } else {
+          player.play(song, playlist: _songs, index: index);
+        }
       },
     );
   }

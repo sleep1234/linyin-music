@@ -355,6 +355,7 @@ class StorageService {
 
   static const _playlistKey = 'player_playlist';
   static const _playlistIndexKey = 'player_playlist_index';
+  static const _positionKey = 'player_position_ms';
 
   /// 保存当前播放列表和索引
   Future<void> savePlaylist(List<Song> playlist, int currentIndex) async {
@@ -382,6 +383,18 @@ class StorageService {
   Future<int> loadPlaylistIndex() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getInt(_playlistIndexKey) ?? -1;
+  }
+
+  /// 保存播放进度（毫秒）
+  Future<void> savePosition(int positionMs) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_positionKey, positionMs);
+  }
+
+  /// 恢复播放进度（毫秒）
+  Future<int> loadPosition() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_positionKey) ?? 0;
   }
 
   // ========== 本地歌单 ==========

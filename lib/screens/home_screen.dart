@@ -300,7 +300,12 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       onTap: () {
-        player.play(song, playlist: _rankSongs, index: index);
+        if (player.currentSong?.id == song.id && player.currentSong?.sourceId == song.sourceId) {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const PlayerScreen()));
+        } else {
+          player.play(song, playlist: _rankSongs, index: index);
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const PlayerScreen()));
+        }
       },
     );
   }

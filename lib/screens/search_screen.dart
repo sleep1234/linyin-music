@@ -303,8 +303,12 @@ class _SearchScreenState extends State<SearchScreen> {
         style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
       ),
       onTap: () {
-        player.play(song, playlist: _results, index: index);
-        Navigator.pop(context);
+        if (player.currentSong?.id == song.id && player.currentSong?.sourceId == song.sourceId) {
+          Navigator.pop(context);
+        } else {
+          player.play(song, playlist: _results, index: index);
+          Navigator.pop(context);
+        }
       },
     );
   }

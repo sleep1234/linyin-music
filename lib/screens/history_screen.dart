@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../services/player_service.dart';
 import '../services/storage_service.dart';
 import '../models/models.dart';
+import 'player_screen.dart';
 
 /// 播放历史
 class HistoryScreen extends StatefulWidget {
@@ -137,7 +138,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ),
       trailing: Text(song.durationText, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
       onTap: () {
-        player.play(song, playlist: _songs, index: index);
+        if (player.currentSong?.id == song.id && player.currentSong?.sourceId == song.sourceId) {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const PlayerScreen()));
+        } else {
+          player.play(song, playlist: _songs, index: index);
+        }
       },
     );
   }

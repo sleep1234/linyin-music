@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import '../models/models.dart';
 import '../config.dart';
@@ -26,6 +27,10 @@ class PlayerService extends ChangeNotifier {
   bool _initStarted = false;
   bool _handlerReady = false;
   bool _isLoading = false;
+  int _savedPositionMs = 0;
+
+  // CarPlay 通信
+  static const _carplayChannel = MethodChannel('com.xiaopeng.netease_music/carplay');
 
   bool get isLoading => _isLoading;
 
@@ -42,6 +47,7 @@ class PlayerService extends ChangeNotifier {
   int _currentLrcIndex = -1;
   StreamSubscription<Duration>? _positionSub;
   Timer? _lyricTimer;
+  Timer? _positionSaveTimer;
 
   // 收藏状态（内存缓存，避免频繁查库）
   Set<String> _favoriteIds = {};
@@ -72,8 +78,54 @@ class PlayerService extends ChangeNotifier {
     });
     _initHandler();
     _startLyricSync();
+    _startPositionSave();
     _loadFavorites(); // 启动时加载收藏ID集合
     _restorePlaylist(); // 启动时恢复播放列表
+    _initCarPlay(); // 初始化 CarPlay 通信
+  }
+
+  /// 初始化 CarPlay MethodChannel
+  void _initCarPlay() {
+    _carplayChannel.setMethodCallHandler((call) async {
+      switch (call.method) {
+        case 'playSong':
+          final index = call.arguments as int;
+          if (index >= 0 && index < _playlist.length) {
+            play(_playlist[index]);
+          }
+          break;
+        case 'togglePlay':
+          togglePlay();
+          break;
+        case 'next':
+          next();
+          break;
+        case 'previous':
+          previous();
+          break;
+        case 'toggleFavorite':
+          final song = currentSong;
+          if (song != null) toggleFavorite(song);
+          break;
+      }
+      return null;
+    });
+  }
+
+  /// 同步播放列表到 CarPlay
+  void _syncToCarPlay() {
+    try {
+      final songData = _playlist.map((s) => {
+        'name': s.name,
+        'artist': s.artist,
+        'id': s.id,
+        'sourceId': s.sourceId,
+      }).toList();
+      _carplayChannel.invokeMethod('updatePlaylist', {
+        'songs': songData,
+        'currentIndex': _currentIndex,
+      });
+    } catch (_) {}
   }
 
   /// 从数据库加载收藏ID集合
@@ -86,26 +138,44 @@ class PlayerService extends ChangeNotifier {
   /// 判断歌曲是否已收藏
   bool isFavorite(Song song) => _favoriteIds.contains('${song.id}_${song.sourceId}');
 
-  /// 切换收藏状态
+  /// 切换收藏状态（乐观更新）
   Future<void> toggleFavorite(Song song) async {
     final key = '${song.id}_${song.sourceId}';
-    if (_favoriteIds.contains(key)) {
-      await _storage.removeFavorite(song.id, song.sourceId);
+    final wasFavorite = _favoriteIds.contains(key);
+    // 先更新内存状态，立即反映到 UI
+    if (wasFavorite) {
       _favoriteIds.remove(key);
     } else {
-      await _storage.addFavorite(song);
       _favoriteIds.add(key);
     }
     notifyListeners();
+    // 异步写库
+    try {
+      if (wasFavorite) {
+        await _storage.removeFavorite(song.id, song.sourceId);
+      } else {
+        await _storage.addFavorite(song);
+      }
+    } catch (_) {
+      // 写库失败，回滚
+      if (wasFavorite) {
+        _favoriteIds.add(key);
+      } else {
+        _favoriteIds.remove(key);
+      }
+      notifyListeners();
+    }
   }
 
   /// 启动时恢复上次的播放列表
   Future<void> _restorePlaylist() async {
     final songs = await _storage.loadPlaylist();
     final index = await _storage.loadPlaylistIndex();
+    final position = await _storage.loadPosition();
     if (songs.isNotEmpty && index >= 0 && index < songs.length) {
       _playlist = songs;
       _currentIndex = index;
+      _savedPositionMs = position;
       notifyListeners();
     }
   }
@@ -113,6 +183,11 @@ class PlayerService extends ChangeNotifier {
   /// 保存当前播放列表到本地
   void _savePlaylist() {
     _storage.savePlaylist(_playlist, _currentIndex);
+    _syncToCarPlay();
+    // 同步 queue 到 audio_service（供 Android Auto / CarWith 浏览）
+    if (_handlerReady) {
+      (_handler as _MusicAudioHandler).syncQueue(_playlist);
+    }
   }
 
   Future<void> _initHandler() async {
@@ -139,8 +214,6 @@ class PlayerService extends ChangeNotifier {
     final song = currentSong;
     if (song == null || _handler == null) return;
 
-    // 通知栏标题：歌曲名 或 歌曲名 + 歌词
-    // 通知栏副标题：歌手
     final displayTitle = title ?? song.name;
     final displaySubtitle = subtitle ?? song.artist;
 
@@ -215,6 +288,10 @@ class PlayerService extends ChangeNotifier {
 
     try {
       await _player.setUrl(url);
+      if (_savedPositionMs > 0) {
+        await _player.seek(Duration(milliseconds: _savedPositionMs));
+        _savedPositionMs = 0;
+      }
       _player.play();
     } catch (e) {
       print('[PlayerService] 播放失败: $e');
@@ -287,6 +364,16 @@ class PlayerService extends ChangeNotifier {
     });
   }
 
+  /// 每5秒保存一次播放进度
+  void _startPositionSave() {
+    _positionSaveTimer?.cancel();
+    _positionSaveTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (_player.playing && _player.position.inMilliseconds > 0) {
+        _storage.savePosition(_player.position.inMilliseconds);
+      }
+    });
+  }
+
   /// 同步当前歌词行
   void _syncLyric() {
     if (_lrcLines.isEmpty) return;
@@ -299,7 +386,6 @@ class PlayerService extends ChangeNotifier {
       _currentLrcIndex = newIdx;
       final lrcText = _lrcLines[newIdx].text;
 
-      // 更新通知栏：标题显示歌词，副标题显示 歌手 - 歌名
       final song = currentSong;
       if (song != null && _handlerReady) {
         _updateMediaItem(
@@ -310,7 +396,6 @@ class PlayerService extends ChangeNotifier {
 
       notifyListeners();
     } else if (newIdx < 0 && _currentLrcIndex >= 0) {
-      // 还没到第一行歌词，恢复显示歌名
       _currentLrcIndex = -1;
       _updateMediaItem();
       notifyListeners();
@@ -326,7 +411,13 @@ class PlayerService extends ChangeNotifier {
   }
 
   void togglePlay() {
-    _player.playing ? _player.pause() : _player.play();
+    if (_player.playing) {
+      _player.pause();
+    } else if (_player.processingState == ProcessingState.idle && currentSong != null) {
+      play(currentSong!);
+    } else {
+      _player.play();
+    }
   }
 
   void pause() => _player.pause();
@@ -400,16 +491,21 @@ class PlayerService extends ChangeNotifier {
   @override
   void dispose() {
     _lyricTimer?.cancel();
+    _positionSaveTimer?.cancel();
     _positionSub?.cancel();
+    if (_player.playing && _player.position.inMilliseconds > 0) {
+      _storage.savePosition(_player.position.inMilliseconds);
+    }
     _player.dispose();
     super.dispose();
   }
 }
 
-/// audio_service Handler
-class _MusicAudioHandler extends BaseAudioHandler with SeekHandler {
+/// audio_service Handler — 支持 Android Auto / CarWith 浏览
+class _MusicAudioHandler extends BaseAudioHandler with SeekHandler, QueueHandler {
   final PlayerService playerService;
   final AudioPlayer player;
+  bool _isPlaying = false;
 
   _MusicAudioHandler({required this.playerService, required this.player}) {
     playbackState.add(_buildState(
@@ -419,6 +515,7 @@ class _MusicAudioHandler extends BaseAudioHandler with SeekHandler {
     ));
 
     player.playingStream.listen((playing) {
+      _isPlaying = playing;
       playbackState.add(_buildState(
         controls: [
           MediaControl.skipToPrevious,
@@ -437,6 +534,33 @@ class _MusicAudioHandler extends BaseAudioHandler with SeekHandler {
         ));
       }
     });
+
+    // 持续同步位置到系统媒体组件，每秒更新一次
+    player.positionStream.listen((position) {
+      playbackState.add(_buildState(
+        controls: [
+          MediaControl.skipToPrevious,
+          _isPlaying ? MediaControl.pause : MediaControl.play,
+          MediaControl.skipToNext,
+        ],
+        playing: _isPlaying,
+      ));
+    });
+  }
+
+  /// 同步播放列表到 audio_service queue（供 Android Auto / CarWith 浏览）
+  void syncQueue(List<Song> playlist) {
+    final items = playlist.map((s) => MediaItem(
+      id: '${s.id}_${s.sourceId}',
+      title: s.name,
+      artist: s.artist,
+      album: s.album,
+      duration: s.duration,
+      artUri: (s.coverUrl != null && s.coverUrl!.startsWith('http'))
+          ? Uri.parse(s.coverUrl!)
+          : null,
+    )).toList();
+    queue.add(items);
   }
 
   PlaybackState _buildState({
@@ -465,7 +589,17 @@ class _MusicAudioHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> stop() async { await player.stop(); await super.stop(); }
   @override
-  Future<void> seek(Duration position) async => player.seek(position);
+  Future<void> seek(Duration position) async {
+    await player.seek(position);
+    playbackState.add(_buildState(
+      controls: [
+        MediaControl.skipToPrevious,
+        _isPlaying ? MediaControl.pause : MediaControl.play,
+        MediaControl.skipToNext,
+      ],
+      playing: _isPlaying,
+    ));
+  }
   @override
   Future<void> skipToNext() async => playerService.next();
   @override

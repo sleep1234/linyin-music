@@ -20,13 +20,24 @@ class PlayerScreen extends StatefulWidget {
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-class _PlayerScreenState extends State<PlayerScreen> {
-  bool _showLyric = false;
+class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderStateMixin {
+  bool _showFullLyric = false;
   final ScrollController _lyricScrollController = ScrollController();
+  late AnimationController _rotationController;
+
+  @override
+  void initState() {
+    super.initState();
+    _rotationController = AnimationController(
+      duration: const Duration(seconds: 20),
+      vsync: this,
+    );
+  }
 
   @override
   void dispose() {
     _lyricScrollController.dispose();
+    _rotationController.dispose();
     super.dispose();
   }
 
@@ -37,6 +48,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
         final song = player.currentSong;
         if (song == null) {
           return const Scaffold(body: Center(child: Text('没有播放中的歌曲')));
+        }
+
+        if (player.player.playing) {
+          if (!_rotationController.isAnimating) {
+            _rotationController.repeat();
+          }
+        } else {
+          _rotationController.stop();
         }
 
         return Scaffold(
@@ -52,18 +71,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
             ),
             child: SafeArea(
-              child: Column(
-                children: [
-                  _buildTopBar(song, player),
-                  Expanded(
-                    child: _showLyric ? _buildLyricView(player) : _buildCover(song),
-                  ),
-                  _buildSongInfo(song, player),
-                  _buildProgressBar(player),
-                  _buildControls(player),
-                  _buildBottomBar(player, song),
-                ],
-              ),
+              child: _showFullLyric
+                  ? _buildFullLyricView(player, song)
+                  : Column(
+                      children: [
+                        _buildTopBar(song, player),
+                        _buildCover(song),
+                        _buildLyricPreview(player),
+                        _buildSongInfo(song, player),
+                        _buildProgressBar(player),
+                        _buildControls(player),
+                        _buildBottomBar(player, song),
+                      ],
+                    ),
             ),
           ),
         );
@@ -74,70 +94,146 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Widget _buildTopBar(Song song, PlayerService player) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          IconButton(icon: const Icon(Icons.keyboard_arrow_down), onPressed: () => Navigator.pop(context)),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text('正在播放', style: TextStyle(fontSize: 12, color: Colors.white70)),
-                Text(song.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
-              ],
+      child: SizedBox(
+        height: 56,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('正在播放', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                  const SizedBox(height: 2),
+                  Text(song.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
             ),
-          ),
-          if (song.isVip && player.isVipMode)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
-              child: const Text('VIP', style: TextStyle(color: Colors.white, fontSize: 10)),
+            Positioned(
+              left: 0,
+              child: IconButton(icon: const Icon(Icons.keyboard_arrow_down), onPressed: () => Navigator.pop(context)),
             ),
-        ],
+            if (song.isVip && player.isVipMode)
+              Positioned(
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                  child: const Text('VIP', style: TextStyle(color: Colors.white, fontSize: 10)),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildCover(Song song) {
-    return Center(
-      child: Container(
-        width: 260,
-        height: 260,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: song.coverUrl != null && song.coverUrl!.startsWith('http')
-              ? CachedNetworkImage(
-                  imageUrl: song.coverUrl!,
-                  fit: BoxFit.cover,
-                  httpHeaders: const {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Referer': 'https://music.163.com',
-                  },
-                  placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                  errorWidget: (context, url, error) => Container(color: Colors.grey.shade300, child: const Icon(Icons.music_note, size: 80, color: Colors.white)),
-                )
-              : Container(color: Colors.grey.shade300, child: const Icon(Icons.music_note, size: 80, color: Colors.white)),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: RotationTransition(
+          turns: _rotationController,
+          child: Container(
+            width: 220,
+            height: 220,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
+            ),
+            child: ClipOval(
+              child: song.coverUrl != null && song.coverUrl!.startsWith('http')
+                  ? CachedNetworkImage(
+                      imageUrl: song.coverUrl!,
+                      fit: BoxFit.cover,
+                      httpHeaders: const {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Referer': 'https://music.163.com',
+                      },
+                      placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+                      errorWidget: (context, url, error) => Container(color: Colors.grey.shade300, child: const Icon(Icons.music_note, size: 80, color: Colors.white)),
+                    )
+                  : Container(color: Colors.grey.shade300, child: const Icon(Icons.music_note, size: 80, color: Colors.white)),
+            ),
+          ),
         ),
       ),
     );
   }
 
-  /// 歌词视图 — 自动高亮当前行
-  Widget _buildLyricView(PlayerService player) {
+  /// 歌词预览 — 专辑下方显示当前歌词上下几句
+  Widget _buildLyricPreview(PlayerService player) {
     final lines = player.lrcLines;
     if (lines.isEmpty) {
-      return const Center(child: Text('暂无歌词', style: TextStyle(color: Colors.white70)));
+      return const SizedBox(
+        height: 80,
+        child: Center(child: Text('暂无歌词', style: TextStyle(color: Colors.white54, fontSize: 14))),
+      );
     }
 
     final currentIdx = player.currentLrcIndex;
+    final start = (currentIdx - 2).clamp(0, lines.length - 1);
+    final end = (currentIdx + 3).clamp(0, lines.length);
+    final visibleLines = lines.sublist(start, end);
 
-    // 自动滚动到当前行
+    return GestureDetector(
+      onTap: () => setState(() => _showFullLyric = true),
+      child: Container(
+        height: 120,
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: visibleLines.map((line) {
+            final idx = lines.indexOf(line);
+            final isCurrent = idx == currentIdx;
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Text(
+                line.text,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: isCurrent ? Colors.white : Colors.white54,
+                  fontSize: isCurrent ? 16 : 13,
+                  fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  /// 全屏歌词视图
+  Widget _buildFullLyricView(PlayerService player, Song song) {
+    final lines = player.lrcLines;
+
+    return Column(
+      children: [
+        _buildTopBar(song, player),
+        Expanded(
+          child: lines.isEmpty
+              ? GestureDetector(
+                  onTap: () => setState(() => _showFullLyric = false),
+                  child: const Center(child: Text('暂无歌词', style: TextStyle(color: Colors.white70))),
+                )
+              : _buildScrollableLyric(player, lines),
+        ),
+        _buildSongInfo(song, player),
+        _buildProgressBar(player),
+        _buildControls(player),
+        _buildBottomBar(player, song),
+      ],
+    );
+  }
+
+  Widget _buildScrollableLyric(PlayerService player, List<LrcLine> lines) {
+    final currentIdx = player.currentLrcIndex;
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (currentIdx >= 0 && _lyricScrollController.hasClients) {
-        // 每行大约高度 40，滚动到当前行居中
         final targetOffset = (currentIdx * 48.0) - 200;
         _lyricScrollController.animateTo(
           targetOffset.clamp(0.0, _lyricScrollController.position.maxScrollExtent),
@@ -147,32 +243,34 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
     });
 
-    return ListView.builder(
-      controller: _lyricScrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 200),
-      itemCount: lines.length,
-      itemBuilder: (context, index) {
-        final isCurrent = index == currentIdx;
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: GestureDetector(
-            onTap: () {
-              // 点击歌词行跳转
-              player.seek(lines[index].timestamp);
-            },
-            child: Text(
-              lines[index].text,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: isCurrent ? Colors.white : Colors.white54,
-                fontSize: isCurrent ? 20 : 16,
-                fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-                height: 1.6,
+    return GestureDetector(
+      onTap: () => setState(() => _showFullLyric = false),
+      child: ListView.builder(
+        controller: _lyricScrollController,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 200),
+        itemCount: lines.length,
+        itemBuilder: (context, index) {
+          final isCurrent = index == currentIdx;
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: GestureDetector(
+              onHorizontalDragEnd: (_) {
+                player.seek(lines[index].timestamp);
+              },
+              child: Text(
+                lines[index].text,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: isCurrent ? Colors.white : Colors.white54,
+                  fontSize: isCurrent ? 20 : 16,
+                  fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                  height: 1.6,
+                ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
@@ -313,13 +411,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
           ),
           IconButton(
-            icon: Icon(_showLyric ? Icons.album : Icons.lyrics, color: _showLyric ? const Color(0xFFEC4141) : null),
+            icon: Icon(_showFullLyric ? Icons.album : Icons.lyrics, color: _showFullLyric ? const Color(0xFFEC4141) : null),
             onPressed: () {
-              setState(() => _showLyric = !_showLyric);
+              setState(() => _showFullLyric = !_showFullLyric);
             },
             tooltip: '歌词',
           ),
-          // 收藏按钮
           IconButton(
             icon: Icon(
               player.isFavorite(song) ? Icons.favorite : Icons.favorite_border,
@@ -328,7 +425,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
             onPressed: () => player.toggleFavorite(song),
             tooltip: player.isFavorite(song) ? '取消收藏' : '收藏',
           ),
-          // 下载按钮
           IconButton(
             icon: const Icon(Icons.download),
             onPressed: () => _downloadSong(context, song),
@@ -354,12 +450,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     return '${min.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
   }
 
-  /// 下载当前歌曲
   Future<void> _downloadSong(BuildContext context, Song song) async {
     final sourceService = context.read<MusicSourceService>();
     final storage = context.read<StorageService>();
 
-    // 检查是否已下载
     final downloaded = await storage.isDownloaded(song.id, song.sourceId);
     if (downloaded) {
       if (mounted) {
@@ -370,7 +464,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return;
     }
 
-    // 获取播放链接
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('正在下载 ${song.name}...')),
@@ -396,7 +489,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
         final filePath = '$downloadDir/$fileName';
         await File(filePath).writeAsBytes(res.bodyBytes);
 
-        // 保存带 filePath 的歌曲记录
         final downloadedSong = Song(
           id: song.id, name: song.name, artist: song.artist,
           artistId: song.artistId, album: song.album, albumId: song.albumId,

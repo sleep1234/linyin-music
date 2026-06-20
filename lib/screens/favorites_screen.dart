@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../services/player_service.dart';
 import '../services/storage_service.dart';
 import '../models/models.dart';
+import 'player_screen.dart';
 
 /// 我喜欢的 —— 收藏歌曲列表
 class FavoritesScreen extends StatefulWidget {
@@ -152,7 +153,11 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           },
         ),
         onTap: () {
-          player.play(song, playlist: _songs, index: index);
+          if (player.currentSong?.id == song.id && player.currentSong?.sourceId == song.sourceId) {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const PlayerScreen()));
+          } else {
+            player.play(song, playlist: _songs, index: index);
+          }
         },
       ),
     );

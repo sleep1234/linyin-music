@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../services/player_service.dart';
 import '../services/storage_service.dart';
 import '../models/models.dart';
+import 'player_screen.dart';
 
 /// 本地下载页面
 class DownloadsScreen extends StatefulWidget {
@@ -159,7 +160,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               const SnackBar(content: Text('本地文件已丢失，尝试在线播放')),
             );
           }
-          player.play(song);
+          if (player.currentSong?.id == song.id && player.currentSong?.sourceId == song.sourceId) {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const PlayerScreen()));
+          } else {
+            player.play(song);
+          }
         }
       },
     );
