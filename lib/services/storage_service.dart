@@ -356,6 +356,7 @@ class StorageService {
   static const _playlistKey = 'player_playlist';
   static const _playlistIndexKey = 'player_playlist_index';
   static const _positionKey = 'player_position_ms';
+  static const _positionSongKey = 'player_position_song_id';
 
   /// 保存当前播放列表和索引
   Future<void> savePlaylist(List<Song> playlist, int currentIndex) async {
@@ -385,16 +386,21 @@ class StorageService {
     return prefs.getInt(_playlistIndexKey) ?? -1;
   }
 
-  /// 保存播放进度（毫秒）
-  Future<void> savePosition(int positionMs) async {
+  /// 保存播放进度（毫秒）+ 歌曲ID
+  Future<void> savePosition(int positionMs, String songId) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_positionKey, positionMs);
+    await prefs.setString(_positionSongKey, songId);
   }
 
-  /// 恢复播放进度（毫秒）
-  Future<int> loadPosition() async {
+  /// 恢复播放进度（毫秒），仅当歌曲匹配时返回
+  Future<int> loadPosition(String currentSongId) async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_positionKey) ?? 0;
+    final savedSongId = prefs.getString(_positionSongKey) ?? '';
+    if (savedSongId == currentSongId) {
+      return prefs.getInt(_positionKey) ?? 0;
+    }
+    return 0;
   }
 
   // ========== 本地歌单 ==========

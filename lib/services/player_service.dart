@@ -171,7 +171,7 @@ class PlayerService extends ChangeNotifier {
   Future<void> _restorePlaylist() async {
     final songs = await _storage.loadPlaylist();
     final index = await _storage.loadPlaylistIndex();
-    final position = await _storage.loadPosition();
+    final position = await _storage.loadPosition(songs[index].id);
     if (songs.isNotEmpty && index >= 0 && index < songs.length) {
       _playlist = songs;
       _currentIndex = index;
@@ -369,7 +369,10 @@ class PlayerService extends ChangeNotifier {
     _positionSaveTimer?.cancel();
     _positionSaveTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (_player.playing && _player.position.inMilliseconds > 0) {
-        _storage.savePosition(_player.position.inMilliseconds);
+        final song = currentSong;
+        if (song != null) {
+          _storage.savePosition(_player.position.inMilliseconds, song.id);
+        }
       }
     });
   }
@@ -494,7 +497,10 @@ class PlayerService extends ChangeNotifier {
     _positionSaveTimer?.cancel();
     _positionSub?.cancel();
     if (_player.playing && _player.position.inMilliseconds > 0) {
-      _storage.savePosition(_player.position.inMilliseconds);
+      final song = currentSong;
+      if (song != null) {
+        _storage.savePosition(_player.position.inMilliseconds, song.id);
+      }
     }
     _player.dispose();
     super.dispose();
