@@ -96,6 +96,9 @@ class _SearchScreenState extends State<SearchScreen> {
     switch (sourceId) {
       case 'netease': return '网易云';
       case 'kuwo': return '酷我';
+      case 'tencent': return 'QQ音乐';
+      case 'bilibili': return 'B站';
+      case 'joox': return 'JOOX';
       case 'tencent': return 'QQ';
       case 'kugou': return '酷狗';
       case 'migu': return '咪咕';
@@ -107,6 +110,9 @@ class _SearchScreenState extends State<SearchScreen> {
     switch (sourceId) {
       case 'netease': return const Color(0xFFEC4141);
       case 'kuwo': return const Color(0xFF3B82F6);
+      case 'tencent': return const Color(0xFF1DB954);
+      case 'bilibili': return const Color(0xFFFB7299);
+      case 'joox': return const Color(0xFF2196F3);
       case 'tencent': return const Color(0xFF10B981);
       case 'kugou': return const Color(0xFFF59E0B);
       case 'migu': return const Color(0xFF8B5CF6);

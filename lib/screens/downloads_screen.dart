@@ -41,6 +41,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     switch (sourceId) {
       case 'netease': return '网易云';
       case 'kuwo': return '酷我';
+      case 'tencent': return 'QQ音乐';
+      case 'bilibili': return 'B站';
+      case 'joox': return 'JOOX';
       default: return sourceId;
     }
   }
@@ -49,6 +52,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     switch (sourceId) {
       case 'netease': return const Color(0xFFEC4141);
       case 'kuwo': return const Color(0xFF3B82F6);
+      case 'tencent': return const Color(0xFF1DB954);
+      case 'bilibili': return const Color(0xFFFB7299);
+      case 'joox': return const Color(0xFF2196F3);
       default: return Colors.grey;
     }
   }

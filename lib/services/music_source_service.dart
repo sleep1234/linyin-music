@@ -17,6 +17,9 @@ class MusicSourceService extends ChangeNotifier {
   static const List<Map<String, String>> _sources = [
     {'id': 'netease', 'name': '网易云', 'icon': '🎵'},
     {'id': 'kuwo', 'name': '酷我', 'icon': '🎸'},
+    {'id': 'tencent', 'name': 'QQ音乐', 'icon': '🎶'},
+    {'id': 'bilibili', 'name': 'B站', 'icon': '📺'},
+    {'id': 'joox', 'name': 'JOOX', 'icon': '🎤'},
   ];
 
   final StorageService _storage;
