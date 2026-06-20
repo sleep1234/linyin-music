@@ -26,46 +26,24 @@ jobs:
       - name: Build iOS (no codesign)
         run: flutter build ios --release --no-codesign
 
-      - name: Archive and export IPA
+      - name: Package IPA
         run: |
-          cat > $RUNNER_TEMP/ExportOptions.plist << 'PLISTEOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>development</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>compileBitcode</key>
-            <false/>
-          </dict>
-          </plist>
-          PLISTEOF
-          cd ios
-          xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release \
-            -archivePath $RUNNER_TEMP/Runner.xcarchive archive \
-            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
-          xcodebuild -exportArchive \
-            -archivePath $RUNNER_TEMP/Runner.xcarchive \
-            -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
-            -exportPath $RUNNER_TEMP/export
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -r linyin-music.ipa Payload/
+          rm -rf Payload
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: linyin-music-ipa
-          path: |
-            build/ios/ipa/*.ipa
-            $RUNNER_TEMP/export/*.ipa
+          path: linyin-music.ipa
 
       - name: Release (on tag)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            build/ios/ipa/*.ipa
-            $RUNNER_TEMP/export/*.ipa
+          files: linyin-music.ipa
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
