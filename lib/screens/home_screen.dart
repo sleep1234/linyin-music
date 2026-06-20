@@ -304,7 +304,6 @@ class _HomeScreenState extends State<HomeScreen> {
           Navigator.push(context, MaterialPageRoute(builder: (_) => const PlayerScreen()));
         } else {
           player.play(song, playlist: _rankSongs, index: index);
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const PlayerScreen()));
         }
       },
     );
