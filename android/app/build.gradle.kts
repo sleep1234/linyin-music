@@ -43,3 +43,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    implementation("androidx.media:media:1.6.0")
+    implementation("androidx.media2:media2-session:1.2.1")
+}
