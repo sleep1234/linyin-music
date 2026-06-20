@@ -6,6 +6,7 @@ import '../services/music_source_service.dart';
 import '../services/storage_service.dart';
 import '../models/models.dart';
 import 'player_screen.dart';
+import 'import_playlist_screen.dart';
 /// 歌单Tab
 class PlaylistTab extends StatefulWidget {
   const PlaylistTab({super.key});
@@ -175,6 +176,17 @@ class _PlaylistTabState extends State<PlaylistTab> {
                   icon: const Icon(Icons.cloud_download),
                   onPressed: _importNeteasePlaylist,
                   tooltip: '导入网易云歌单',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.link),
+                  onPressed: () async {
+                    final result = await Navigator.push<bool>(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ImportPlaylistScreen()),
+                    );
+                    if (result == true) _loadPlaylists();
+                  },
+                  tooltip: '导入歌单链接',
                 ),
                 IconButton(
                   icon: const Icon(Icons.add),

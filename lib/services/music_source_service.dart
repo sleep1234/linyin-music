@@ -336,4 +336,185 @@ class MusicSourceService extends ChangeNotifier {
       return [];
     }
   }
+
+  // ========== 歌单导入 ==========
+
+  /// 解析分享链接，返回 {platform, id}
+  static Map<String, String>? parseShareUrl(String url) {
+    // 网易云: https://y.music.163.com/m/playlist?id=2155647668
+    //         https://music.163.com/playlist?id=2155647668
+    final neteaseMatch = RegExp(r'music\.163\.com.*[?&]id=(\d+)').firstMatch(url);
+    if (neteaseMatch != null) {
+      return {'platform': 'netease', 'id': neteaseMatch.group(1)!};
+    }
+
+    // 汽水音乐: https://qishui.douyin.com/s/xxx 或 ?playlist_id=xxx
+    final qishuiShortMatch = RegExp(r'qishui\.douyin\.com/s/(\w+)').firstMatch(url);
+    if (qishuiShortMatch != null) {
+      return {'platform': 'qishui', 'id': qishuiShortMatch.group(1)!, 'type': 'short'};
+    }
+    final qishuiMatch = RegExp(r'qishui\.douyin\.com.*[?&]playlist_id=(\d+)').firstMatch(url);
+    if (qishuiMatch != null) {
+      return {'platform': 'qishui', 'id': qishuiMatch.group(1)!};
+    }
+
+    return null;
+  }
+
+  /// 获取网易云歌单歌曲列表
+  Future<List<Map<String, String>>> fetchNeteasePlaylist(String id) async {
+    try {
+      final uri = Uri.parse('https://music.163.com/api/v6/playlist/detail?id=$id');
+      final res = await http.get(uri, headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://music.163.com',
+      }).timeout(const Duration(seconds: 15));
+      if (res.statusCode != 200) return [];
+      final data = jsonDecode(res.body);
+      if (data['code'] != 200) return [];
+      final tracks = data['playlist']?['tracks'] as List? ?? [];
+      return tracks.map<Map<String, String>>((t) {
+        final artists = t['ar'] as List? ?? [];
+        return {
+          'name': t['name']?.toString() ?? '',
+          'artist': artists.map((a) => a['name'] ?? '').join(' / '),
+        };
+      }).toList();
+    } catch (e) {
+      debugPrint('[网易云歌单] 获取失败: $e');
+      return [];
+    }
+  }
+
+  /// 获取汽水音乐歌单歌曲列表（从HTML SSR数据提取）
+  Future<List<Map<String, String>>> fetchQishuiPlaylist(String playlistId) async {
+    try {
+      final url = 'https://qishui.douyin.com/playlist?playlist_id=$playlistId';
+      final res = await http.get(Uri.parse(url), headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
+      }).timeout(const Duration(seconds: 15));
+      if (res.statusCode != 200) return [];
+
+      final html = res.body;
+      // 提取 _ROUTER_DATA
+      final match = RegExp(r'_ROUTER_DATA\s*=\s*').firstMatch(html);
+      if (match == null) return [];
+
+      final start = match.end;
+      int depth = 0;
+      int end = start;
+      for (int i = start; i < html.length; i++) {
+        if (html[i] == '{') depth++;
+        else if (html[i] == '}') {
+          depth--;
+          if (depth == 0) { end = i + 1; break; }
+        }
+      }
+
+      final jsonData = jsonDecode(html.substring(start, end));
+      final medias = jsonData['loaderData']?['playlist_page']?['medias'] as List? ?? [];
+
+      final List<Map<String, String>> songs = [];
+      for (final media in medias) {
+        final entity = media['entity'] ?? {};
+        final track = entity['track'];
+        if (track == null) continue;
+
+        final name = track['name']?.toString() ?? '';
+        final artists = track['artists'] as List? ?? [];
+        final artistNames = artists
+            .whereType<Map<String, dynamic>>()
+            .map((a) => a['name']?.toString() ?? '')
+            .where((n) => n.isNotEmpty)
+            .join(' / ');
+
+        if (name.isNotEmpty) {
+          songs.add({'name': name, 'artist': artistNames});
+        }
+      }
+
+      return songs;
+    } catch (e) {
+      debugPrint('[汽水音乐歌单] 获取失败: $e');
+      return [];
+    }
+  }
+
+  /// 导入歌单：解析URL → 获取歌曲列表 → 在多源中搜索匹配 → 返回匹配的歌曲
+  /// callback 用于报告进度
+  Future<List<Song>> importPlaylist(
+    String url, {
+    void Function(int current, int total, String songName)? onProgress,
+  }) async {
+    final parsed = parseShareUrl(url);
+    if (parsed == null) {
+      debugPrint('[歌单导入] 无法识别链接: $url');
+      return [];
+    }
+
+    // 获取原始歌曲列表
+    List<Map<String, String>> rawSongs;
+    if (parsed['platform'] == 'netease') {
+      rawSongs = await fetchNeteasePlaylist(parsed['id']!);
+    } else if (parsed['platform'] == 'qishui') {
+      if (parsed['type'] == 'short') {
+        // 短链接需要先跟随重定向获取 playlist_id
+        final playlistId = await _resolveQishuiShortUrl(parsed['id']!);
+        if (playlistId == null) return [];
+        rawSongs = await fetchQishuiPlaylist(playlistId);
+      } else {
+        rawSongs = await fetchQishuiPlaylist(parsed['id']!);
+      }
+    } else {
+      return [];
+    }
+
+    if (rawSongs.isEmpty) return [];
+
+    debugPrint('[歌单导入] 获取到 ${rawSongs.length} 首歌曲，开始多源匹配...');
+
+    // 逐首搜索匹配
+    final List<Song> matched = [];
+    for (int i = 0; i < rawSongs.length; i++) {
+      final s = rawSongs[i];
+      final keyword = ((s['artist'] ?? '').isNotEmpty) ? '${s['name']} ${s['artist']}' : '${s['name']}';
+      onProgress?.call(i + 1, rawSongs.length, s['name'] ?? '');
+
+      try {
+        final results = await search(keyword);
+        if (results.isNotEmpty) {
+          // 取第一个匹配的
+          matched.add(results.first);
+        }
+      } catch (_) {}
+
+      // 避免请求过快
+      if (i % 5 == 4) {
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+    }
+
+    debugPrint('[歌单导入] 匹配完成: ${matched.length}/${rawSongs.length}');
+    return matched;
+  }
+
+  /// 解析汽水音乐短链接获取 playlist_id
+  Future<String?> _resolveQishuiShortUrl(String shortCode) async {
+    try {
+      final res = await http.get(
+        Uri.parse('https://qishui.douyin.com/s/$shortCode'),
+        headers: {'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)'},
+      ).timeout(const Duration(seconds: 10));
+      // 跟随重定向后的URL中提取 playlist_id
+      final finalUrl = res.request?.url?.toString() ?? '';
+      final match = RegExp(r'playlist_id=(\d+)').firstMatch(finalUrl);
+      if (match != null) return match.group(1);
+      // 也检查 body
+      final bodyMatch = RegExp(r'playlist_id=(\d+)').firstMatch(res.body);
+      if (bodyMatch != null) return bodyMatch.group(1);
+    } catch (e) {
+      debugPrint('[汽水短链] 解析失败: $e');
+    }
+    return null;
+  }
 }
