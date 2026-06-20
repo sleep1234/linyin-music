@@ -34,14 +34,10 @@
             android:name="com.ryanheise.audioservice.AudioService"
             android:foregroundServiceType="mediaPlayback"
             android:exported="true"
-            android:automedia="true"
             tools:ignore="Instantiatable">
             <intent-filter>
                 <action android:name="android.media.browse.MediaBrowserService"/>
             </intent-filter>
-            <meta-data
-                android:name="android.media.browse"
-                android:resource="@xml/media_browser_service_desc" />
         </service>
         <receiver
             android:name="com.ryanheise.audioservice.MediaButtonReceiver"
